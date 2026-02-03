@@ -1,4 +1,4 @@
-streamlit
+streamlit==1.52.1
 langchain==1.1.0
 langchain-community
 langchain-openai
@@ -7,3 +7,4 @@ chromadb
 openai
 boto3
 pypdf
+tiktoken
