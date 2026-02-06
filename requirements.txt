@@ -8,3 +8,5 @@ openai
 boto3
 pypdf
 tiktoken
+fastapi
+uvicorn
