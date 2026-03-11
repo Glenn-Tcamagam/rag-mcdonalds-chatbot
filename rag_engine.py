@@ -37,11 +37,28 @@ def load_pdf(path_pdf):
 # 2. SPLIT DES DOCUMENTS
 # ------------------------------------------------------------
 def split_documents(docs):
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=120
-    )
+    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=120)
     return splitter.split_documents(docs)
+
+
+# ------------------------------------------------------------
+# 3. VECTORSTORE + EMBEDDINGS OPENAI
+# ------------------------------------------------------------
+# def create_vectorstore(splits):
+#  api_key = get_openai_key_from_aws()
+
+#  embeddings = OpenAIEmbeddings(
+#      model="text-embedding-3-large",
+#      openai_api_key=api_key
+#  )
+
+#  vectorstore = Chroma.from_documents(
+#      documents=splits,
+#      embedding=embeddings,
+#      persist_directory="chroma_db"
+#  )
+
+#   return vectorstore.as_retriever(search_kwargs={"k": 7})
 
 
 # ------------------------------------------------------------
@@ -51,15 +68,24 @@ def create_vectorstore(splits):
     api_key = get_openai_key_from_aws()
 
     embeddings = OpenAIEmbeddings(
-        model="text-embedding-3-large",
-        openai_api_key=api_key
+        model="text-embedding-3-large", openai_api_key=api_key
     )
 
-    vectorstore = Chroma.from_documents(
-        documents=splits,
-        embedding=embeddings,
-        persist_directory="chroma_db"
-    )
+    persist_directory = "chroma_db"
+
+    # ✅ SI LA BASE EXISTE → ON LA CHARGE
+    if os.path.exists(persist_directory):
+
+        vectorstore = Chroma(
+            persist_directory=persist_directory, embedding_function=embeddings
+        )
+
+    # ❌ SINON → ON LA CRÉE
+    else:
+
+        vectorstore = Chroma.from_documents(
+            documents=splits, embedding=embeddings, persist_directory=persist_directory
+        )
 
     return vectorstore.as_retriever(search_kwargs={"k": 7})
 
@@ -70,7 +96,9 @@ def create_vectorstore(splits):
 class DynamoDBMemory:
     def __init__(self, table_name="rag_memory", session_id="default"):
         self.session_id = session_id
-        self.table = boto3.resource("dynamodb", region_name="eu-north-1").Table(table_name)
+        self.table = boto3.resource("dynamodb", region_name="eu-north-1").Table(
+            table_name
+        )
 
     def save_message(self, role, content):
         self.table.put_item(
@@ -78,14 +106,16 @@ class DynamoDBMemory:
                 "session_id": self.session_id,
                 "timestamp": int(time.time() * 1000),
                 "role": role,
-                "content": content
+                "content": content,
             }
         )
 
     def load_messages(self):
         resp = self.table.query(
-            KeyConditionExpression=boto3.dynamodb.conditions.Key("session_id").eq(self.session_id),
-            ScanIndexForward=True
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("session_id").eq(
+                self.session_id
+            ),
+            ScanIndexForward=True,
         )
 
         messages = resp.get("Items", [])
@@ -109,44 +139,34 @@ def create_rag(retriever, session_id="default"):
     api_key = get_openai_key_from_aws()
     os.environ["OPENAI_API_KEY"] = api_key
 
-    llm = ChatOpenAI(
-        model="gpt-4o-mini",
-        temperature=0
-    )
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     # Ajout de {memory} dans le prompt
     system_prompt = (
-    "Tu es un assistant expert spécialisé EXCLUSIVEMENT dans les burgers de McDonald’s.\n"
-    "Tu réponds aux questions des utilisateurs en t’appuyant sur un système RAG professionnel.\n\n"
+        "Tu es un assistant expert spécialisé EXCLUSIVEMENT dans les burgers de McDonald’s.\n"
+        "Tu réponds aux questions des utilisateurs en t’appuyant sur un système RAG professionnel.\n\n"
+        "📌 SOURCES AUTORISÉES (par ordre de priorité) :\n"
+        "1️⃣ La mémoire de la conversation (questions et réponses précédentes)\n"
+        "2️⃣ Les documents PDF McDonald’s indexés (burgers, ingrédients, allergènes, valeurs nutritionnelles, prix)\n"
+        "3️⃣ Ton raisonnement logique UNIQUEMENT pour expliquer ou reformuler les informations trouvées\n\n"
+        "🧠 RÈGLES IMPORTANTES :\n"
+        "- Tu réponds UNIQUEMENT à propos des burgers McDonald’s.\n"
+        "- Si une information est présente dans les documents, tu dois la donner clairement et précisément.\n"
+        "- Tu ne dois JAMAIS inventer d’informations.\n"
+        "- Si l’information n’est pas présente dans les documents, dis-le explicitement.\n"
+        "- Si la question concerne un autre produit que les burgers (boissons, desserts, menus enfants, etc.), précise que ce n’est pas couvert.\n\n"
+        "📄 MÉMOIRE DE LA CONVERSATION :\n{memory}\n\n"
+        "📄 EXTRAITS DES DOCUMENTS (RAG) :\n{context}\n\n"
+        "✍️ STYLE DE RÉPONSE ATTENDU :\n"
+        "- Réponse claire et structurée\n"
+        "- Listes à puces si nécessaire\n"
+        "- Ton professionnel et pédagogique\n"
+        "- Réponses complètes mais concises\n"
+    )
 
-    "📌 SOURCES AUTORISÉES (par ordre de priorité) :\n"
-    "1️⃣ La mémoire de la conversation (questions et réponses précédentes)\n"
-    "2️⃣ Les documents PDF McDonald’s indexés (burgers, ingrédients, allergènes, valeurs nutritionnelles, prix)\n"
-    "3️⃣ Ton raisonnement logique UNIQUEMENT pour expliquer ou reformuler les informations trouvées\n\n"
-
-    "🧠 RÈGLES IMPORTANTES :\n"
-    "- Tu réponds UNIQUEMENT à propos des burgers McDonald’s.\n"
-    "- Si une information est présente dans les documents, tu dois la donner clairement et précisément.\n"
-    "- Tu ne dois JAMAIS inventer d’informations.\n"
-    "- Si l’information n’est pas présente dans les documents, dis-le explicitement.\n"
-    "- Si la question concerne un autre produit que les burgers (boissons, desserts, menus enfants, etc.), précise que ce n’est pas couvert.\n\n"
-
-    "📄 MÉMOIRE DE LA CONVERSATION :\n{memory}\n\n"
-
-    "📄 EXTRAITS DES DOCUMENTS (RAG) :\n{context}\n\n"
-
-    "✍️ STYLE DE RÉPONSE ATTENDU :\n"
-    "- Réponse claire et structurée\n"
-    "- Listes à puces si nécessaire\n"
-    "- Ton professionnel et pédagogique\n"
-    "- Réponses complètes mais concises\n"
-)
-
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("human", "{input}")
-    ])
+    prompt = ChatPromptTemplate.from_messages(
+        [("system", system_prompt), ("human", "{input}")]
+    )
 
     def format_docs(docs):
         return "\n\n".join([d.page_content for d in docs])
@@ -160,7 +180,7 @@ def create_rag(retriever, session_id="default"):
         inputs = {
             "memory": conversation_memory,
             "context": context,
-            "input": user_input
+            "input": user_input,
         }
 
         answer = (prompt | llm | StrOutputParser()).invoke(inputs)
@@ -174,11 +194,11 @@ def create_rag(retriever, session_id="default"):
     return rag_with_memory
 
 
-
 # -----------------------------
 # Helper: construire la chaîne RAG complète (utilisée par app.py)
 # -----------------------------
 import os  # si déjà importé dans le fichier, ça ne pose pas de problème
+
 
 def get_rag_chain(session_id: str = "client_1", pdf_folder: str = "pdfs"):
     """

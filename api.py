@@ -9,7 +9,7 @@ from rag_engine import get_rag_chain
 app = FastAPI(
     title="RAG McDonald's API",
     description="API RAG pour répondre aux questions sur les burgers McDonald's",
-    version="1.0"
+    version="1.0",
 )
 
 # ---------------------------
@@ -17,21 +17,22 @@ app = FastAPI(
 # ---------------------------
 
 origins = [
-    "http://localhost:5501",   # portfolio en local (Live Server VSCode)
-    "http://127.0.0.1:5501",
-    "https://portfolio-tchamagamglenn.netlify.app"  # portfolio en prod
+    "http://localhost:5500",  # portfolio en local (Live Server VSCode)
+    "http://127.0.0.1:5500",
+    "https://portfolio-tchamagamglenn.netlify.app",  # portfolio en prod
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,      # domaines autorisés
+    allow_origins=origins,  # domaines autorisés
     allow_credentials=True,
-    allow_methods=["*"],        # GET, POST, etc.
+    allow_methods=["*"],  # GET, POST, etc.
     allow_headers=["*"],
 )
 
 # 👉 Initialisation du RAG (chargé une seule fois au démarrage)
 rag_chain = get_rag_chain()
+
 
 # ---------
 # Modèle de requête (ce que le client envoie)
@@ -39,11 +40,13 @@ rag_chain = get_rag_chain()
 class ChatRequest(BaseModel):
     question: str
 
+
 # ---------
 # Modèle de réponse (ce que l'API renvoie)
 # ---------
 class ChatResponse(BaseModel):
     answer: str
+
 
 # ---------
 # Endpoint de test
@@ -51,6 +54,7 @@ class ChatResponse(BaseModel):
 @app.get("/")
 def health_check():
     return {"status": "API RAG opérationnelle"}
+
 
 # ---------
 # Endpoint principal RAG
@@ -66,6 +70,4 @@ def chat(request: ChatRequest):
     # Appel du RAG
     answer = rag_chain(request.question)
 
-    return {
-        "answer": answer
-    }
+    return {"answer": answer}
