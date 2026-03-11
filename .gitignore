@@ -1,1 +1,43 @@
-"venv/" 
+# Python cache
+__pycache__/
+
+# Python compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# Distribution
+build/
+dist/
+*.egg-info/
+
+# Environment files
+.env.*
+
+# Virtual environment
+venv/
+
+# Vector database
+chroma_db/
+
+# Secrets and keys
+*.pem
+.env
+
+# AWS / credentials
+.aws/
+.ssh/
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
